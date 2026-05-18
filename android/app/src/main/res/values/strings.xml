@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Ruas e Patas</string>
+    <string name="title_activity_main">Ruas e Patas</string>
+    <string name="package_name">com.ruasepatas.app</string>
+    <string name="custom_url_scheme">com.ruasepatas.app</string>
+</resources>
