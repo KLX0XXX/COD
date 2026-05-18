@@ -5,6 +5,8 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Ruas e Patas - Salvador</title>
 
+<script src="capacitor.js"></script>
+
 <link rel="icon" type="image/png" href="favicon.png">
 
 <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -91,8 +93,7 @@
   
   .nav-logo { 
     font-size: 1.4rem; 
-    color: var(--text-main); 
-    white-space: nowrap;
+    color: var(--text-main);  White-space: nowrap;
   }
   .nav-logo span { 
     color: var(--orange-primary); 
@@ -473,6 +474,7 @@
     
     <div style="margin-bottom: 20px;">
       <input type="file" id="foto-input" accept="image/*">
+      <button class="btn-main btn-outline" id="btn-foto-nativo" style="display: none; margin-top: 10px;">📸 Tirar Foto com a Câmera</button>
       <img id="preview-img" style="width:100%; max-height: 300px; object-fit: cover; border-radius: var(--radius-md); margin-top: 16px; display: none; border: 1px solid var(--border);">
     </div>
     
@@ -550,6 +552,9 @@
   window.mapInstance = null;
   window.selectMap = null;
 
+  // Verifica se o código está rodando dentro do aplicativo móvel nativo (Capacitor)
+  const isCapacitorApp = window.Capacitor && window.Capacitor.isNativePlatform();
+
   function showToast(message, isError = false) {
     const container = document.getElementById('toast-container');
     const toast = document.createElement('div');
@@ -592,7 +597,6 @@
   };
 
   window.fecharVisualizadorImagem = (event, forcar = false) => {
-    // Só fecha se clicar no fundo opaco ou se clicar no botão X explicitamente
     if (event.target.id === 'image-viewer-modal' || forcar) {
       document.getElementById('image-viewer-modal').classList.remove('active');
       document.getElementById('viewer-full-img').src = "";
@@ -600,7 +604,7 @@
   };
 
   window.baixarImagemVisualizador = (event) => {
-    event.stopPropagation(); // Evita acionar o fechamento do modal ao clicar no download
+    event.stopPropagation(); 
     const src = document.getElementById('viewer-full-img').src;
     if (!src) return;
 
@@ -662,19 +666,38 @@
     } catch(e) { showToast("Falha no servidor de buscas.", true); }
   };
 
-  document.getElementById('btn-usar-gps').onclick = () => {
-    if (!navigator.geolocation) return showToast("GPS não suportado.", true);
-    showToast("Acessando satélite...");
-    navigator.geolocation.getCurrentPosition(
-      (p) => {
-        const lat = p.coords.latitude; const lon = p.coords.longitude;
+  // CONFIGURAÇÃO DO GPS (WEB VS NATIVO)
+  document.getElementById('btn-usar-gps').onclick = async () => {
+    if (isCapacitorApp) {
+      // Código Nativo do Celular (Capacitor)
+      showToast("Acessando GPS do smartphone...");
+      try {
+        const { Geolocation } = window.Capacitor.Plugins;
+        const p = await Geolocation.getCurrentPosition({ enableHighAccuracy: true, timeout: 8000 });
+        const lat = p.coords.latitude; 
+        const lon = p.coords.longitude;
         marcarNoMapa(lat, lon);
         window.selectMap.setView([lat, lon], 16);
-        showToast("GPS sincronizado!");
-      },
-      (err) => { showToast("Sinal do GPS falhou. Digite o endereço.", true); },
-      { enableHighAccuracy: true, timeout: 7000 }
-    );
+        showToast("GPS Nativo sincronizado!");
+      } catch (err) {
+        console.error(err);
+        showToast("Sinal de GPS falhou. Permita o acesso nas configurações.", true);
+      }
+    } else {
+      // Código Web Tradicional (Mantido para rodar no PC)
+      if (!navigator.geolocation) return showToast("GPS não suportado.", true);
+      showToast("Acessando localização do navegador...");
+      navigator.geolocation.getCurrentPosition(
+        (p) => {
+          const lat = p.coords.latitude; const lon = p.coords.longitude;
+          marcarNoMapa(lat, lon);
+          window.selectMap.setView([lat, lon], 16);
+          showToast("GPS do navegador sincronizado!");
+        },
+        (err) => { showToast("Sinal do navegador falhou. Digite o endereço.", true); },
+        { enableHighAccuracy: true, timeout: 7000 }
+      );
+    }
   };
 
   function marcarNoMapa(lat, lng) {
@@ -739,7 +762,6 @@
     });
   }
 
-  /* REESTRUTURAÇÃO AQUI: Adicionado evento de clique para abrir o visualizador de imagem customizado */
   function renderLista() {
     const cont = document.getElementById('lista-denuncias');
     if(!window.allDenuncias) return;
@@ -753,25 +775,55 @@
     `).join('');
   }
 
-  document.getElementById('foto-input').onchange = (e) => {
-    const file = e.target.files[0]; if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (event) => {
-      const img = new Image();
-      img.onload = () => {
-        const canvas = document.createElement('canvas'); const MAX_WIDTH = 600;
-        let width = img.width; let height = img.height;
-        if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
-        canvas.width = width; canvas.height = height;
-        const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
-        base64Foto = canvas.toDataURL('image/jpeg', 0.5);
+  // CONFIGURAÇÃO DA CÂMERA / UP-LOAD DE FOTO
+  const fileInput = document.getElementById('foto-input');
+  const nativeCamBtn = document.getElementById('btn-foto-nativo');
+
+  if (isCapacitorApp) {
+    // Se for o App, esconde o seletor padrão de arquivos HTML e exibe o botão estilizado de Câmera Nativa
+    fileInput.style.display = 'none';
+    nativeCamBtn.style.display = 'flex';
+
+    nativeCamBtn.onclick = async () => {
+      try {
+        const { Camera } = window.Capacitor.Plugins;
+        const image = await Camera.getPhoto({
+          quality: 60, // Boa qualidade e leve para o Firebase
+          allowEditing: false,
+          resultType: 'base64'
+        });
+
+        base64Foto = `data:image/jpeg;base64,${image.base64String}`;
         const preview = document.getElementById('preview-img');
-        preview.src = base64Foto; preview.style.display = "block";
-      };
-      img.src = event.target.result;
+        preview.src = base64Foto; 
+        preview.style.display = "block";
+        showToast("Foto capturada com sucesso!");
+      } catch (erro) {
+        console.error("Câmera nativa cancelada ou falhou:", erro);
+      }
     };
-    reader.readAsDataURL(file);
-  };
+  } else {
+    // Comportamento Web original mantido se aberto pelo navegador
+    fileInput.onchange = (e) => {
+      const file = e.target.files[0]; if (!file) return;
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const img = new Image();
+        img.onload = () => {
+          const canvas = document.createElement('canvas'); const MAX_WIDTH = 600;
+          let width = img.width; let height = img.height;
+          if (width > MAX_WIDTH) { height *= MAX_WIDTH / width; width = MAX_WIDTH; }
+          canvas.width = width; canvas.height = height;
+          const ctx = canvas.getContext('2d'); ctx.drawImage(img, 0, 0, width, height);
+          base64Foto = canvas.toDataURL('image/jpeg', 0.5);
+          const preview = document.getElementById('preview-img');
+          preview.src = base64Foto; preview.style.display = "block";
+        };
+        img.src = event.target.result;
+      };
+      reader.readAsDataURL(file);
+    };
+  }
 
   function resetForm() { 
     document.getElementById('titulo').value = ""; document.getElementById('address-input').value = ""; 
