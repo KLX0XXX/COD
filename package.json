@@ -4,9 +4,8 @@
   "description": "Aplicativo Ruas e Patas",
   "main": "index.js",
   "scripts": {
-    "init-android": "cap add android",
     "ionic:build": "echo 'No build script needed'",
-    "postinstall": "cap-manifest && cap add android || true"
+    "postinstall": "npx cap add android || true"
   },
   "dependencies": {
     "@capacitor/android": "^6.0.0",
